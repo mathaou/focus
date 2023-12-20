@@ -159,7 +159,10 @@ active_editor_handle_event :: (editor: *Editor, buffer: *Buffer, event: Input.Ev
         case .close_right_editor;               close_editor(.right);
 
         case .close_dialog;                     hide_build_panel();
-        case .escape;                           hide_build_panel(); remove_additional_cursors(editor);
+        case .escape;                           hide_build_panel();
+                                                remove_additional_cursors(editor);
+                                                reset_search_results(*editor.search_bar);
+                                                editor.refresh_highlights = true;
 
         case .save;                             save    (editor.buffer_id);
         case .save_as;                          save_as (editor.buffer_id);
@@ -285,6 +288,7 @@ active_editor_handle_event :: (editor: *Editor, buffer: *Buffer, event: Input.Ev
     if buffer.dirty {
         rescan_for_lines(buffer);
         if line_wrap_is_active(editor) then rescan_for_wrapped_lines(editor, buffer);
+        if editor.search_bar.results then search_and_update_results(editor, buffer, jump = false);
     }
     for * editor.cursors put_cursor_in_valid_spot(it, buffer);
     if editor.cursors.count > 1 then organise_cursors(editor);  // sort and maybe merge overlapping cursors
@@ -376,6 +380,7 @@ active_editor_type_char :: (char: u32) {
     buffer.last_edit_time = frame_time;
     editor.cursor_moved = .unimportant;
     cursors_start_blinking();
+    if editor.search_bar.results then search_and_update_results(editor, buffer, jump = false);
 }
 
 get_active_editor_and_buffer :: () -> *Editor, *Buffer {
@@ -394,7 +399,7 @@ refresh_all_editors_for_buffer :: (buffer_id: s64) {
 
         adjust_cursors_and_viewport(editor, buffer, editor_id);
         editor.refresh_highlights = true;
-        if search_bar_is_open(editor) search_and_update_results(editor, buffer);
+        if editor.search_bar.results then search_and_update_results(editor, buffer);
     }
     array_reset_keeping_memory(*buffer.edit_notifications);
 }
@@ -857,9 +862,6 @@ close_search_bar :: inline (editor: *Editor, jump_to_original_cursor := false, j
         cursor.pos = xx (cursor.sel + results[selected_result].count);
         editor.scroll_to_cursor = .yes;
     }
-
-    reset_search_results(*editor.search_bar);
-    editor.refresh_highlights = true;
 }
 
 search_bar_toggle_expand :: (using editor: *Editor) {

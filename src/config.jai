@@ -22,7 +22,10 @@ load_global_config :: (fallback_to_default_on_failure := false, force := false) 
         global_config = loaded_config;
         return true, true, loaded_config.there_were_warnings;
     } else {
-        if fallback_to_default_on_failure then config = DEFAULT_CONFIG;
+        if fallback_to_default_on_failure {
+            config = DEFAULT_CONFIG;
+            apply_config();
+        }
         global_config.hash = loaded_config.hash;
         free_loaded_config(*loaded_config);
         return false, false, false;
@@ -67,9 +70,6 @@ load_project_config :: (project: string = "", force := false) -> success: bool, 
 }
 
 apply_config :: () {
-    // Apply colors
-    Colors = config.colors;
-    CODE_COLOR_MAP = refresh_code_color_map();
     platform_set_border_color();
 
     // Make sure the values are within the acceptable range
@@ -162,7 +162,7 @@ refresh_config :: (path: string) {
 
     if dirs_added || dirs_removed {
         should_reload_workspace = true;
-        preserve_visible_editors_after_reload = true;
+        automatic_workspace_reload = true;
         if unsaved_buffers_exist() {
             show_unsaved_buffers_dialog(.reload_workspace);
             clear_user_messages();
@@ -192,7 +192,7 @@ close_project :: () {
         } else {
             should_reload_workspace = true;
         }
-        preserve_visible_editors_after_reload = false;
+        automatic_workspace_reload = false;
     } else {
         add_user_error("Couldn't close project because the global config failed to load", dismiss_in_seconds = 10);
     }
@@ -333,11 +333,11 @@ merge_configs :: (dst: *Config, parsed: Parsed_Config) {
 
     // Colors
     for parsed.colors {
-        color_ptr := map_color_name_to_color_struct(dst, it.color_name);
-        if color_ptr {
-            <<color_ptr = it.color;
+        color := map_name_to_color(it.color_name);
+        if color != .NONE {
+            COLOR_MAP[color] = it.color;
         } else {
-            log_error("Couldn't map color name '%' to color pointer. This is a bug", it.color_name);
+            log_error("Couldn't map color name '%' to color enum value. This is a bug", it.color_name);
         }
     }
 
@@ -375,7 +375,6 @@ Config :: struct {
     keymap:    Keymap;
     settings:  Settings;
     style:     Style;
-    colors:    Color_Values;
     build:     Build_Config;
     linux:     Linux_Config;
 }
